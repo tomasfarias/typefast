@@ -5,18 +5,15 @@
 
 #define MAX_LEN 256
 
-int option;
-int correct;
-
 void append(char* s, int c);
 int char_in_pos(char* s, int c, int pos);
 int end_screen(int lines, int cols, int correct, int size_words);
 int title_screen(int lines, int cols);
-int game_screen(int lines, int cols, char (*words)[MAX_LEN], int size_words, int lives);
+int game_screen(int lines, int cols, char (*words)[MAX_LEN], int size_words);
 int move_cursor_vertical(int y, int x, int maxpos, int curpos);
+int lives_counter(int lives, int amount, int maxcols);
 
 int main (void) {
-
     char curr[MAX_LEN];
     char words[4][MAX_LEN] = {
         "jotaro",
@@ -24,10 +21,10 @@ int main (void) {
         "miau",
         "ahre"
     };
-    int correct, maxlines, maxcols, lives;
+    int correct, maxlines, maxcols;
     size_t size_words = sizeof(words) / sizeof(words[0]);
 
-    /* initialize curses */
+    /* Initialize curses */
     initscr();
     cbreak();
     keypad(stdscr, TRUE);
@@ -36,11 +33,10 @@ int main (void) {
     maxlines = LINES - 1;
     maxcols = COLS - 1;
 
+    /* Game loop */
     while (1) {
-        lives = 3;
-
         title_screen(maxlines, maxcols);
-        correct = game_screen(maxlines, maxcols, words, size_words, lives);
+        correct = game_screen(maxlines, maxcols, words, size_words);
         end_screen(maxlines, maxcols, correct, size_words);
     }
 
@@ -124,9 +120,10 @@ int end_screen (int lines, int cols, int correct, int size_words) {
     }
 }
 
-int game_screen (int lines, int cols, char (*words)[MAX_LEN], int size_words, int lives) {
+int game_screen (int lines, int cols, char (*words)[MAX_LEN], int size_words) {
     char curr[MAX_LEN];
     int ch, chpos, count;
+    int correct = 0;
 
     for (count = 0; count < size_words; ++count) {
         clear();
@@ -136,8 +133,9 @@ int game_screen (int lines, int cols, char (*words)[MAX_LEN], int size_words, in
         memset(curr, 0, sizeof(curr)); /* Reset current attemp */
 
         mvprintw(lines / 2, cols / 2, "%s", words[count]);
-        mvprintw(0, cols, "Lives: %d", lives);
         refresh();
+
+        int lives = lives_counter(3, 0, cols);
 
         while (lives > 0) {
             ch = getch();
@@ -158,7 +156,7 @@ int game_screen (int lines, int cols, char (*words)[MAX_LEN], int size_words, in
 
             } else {
                 /* Incorrect char */
-                --lives;
+                lives = lives_counter(lives, -1, cols);
                 if (lives == 0) {
                     break;
                 }
@@ -207,4 +205,17 @@ int move_cursor_vertical (int y, int x, int maxpos, int curpos) {
                 return curpos;
         }
     }
+}
+
+int lives_counter(int lives, int amount, int maxcols){
+    int new_lives;
+    static WINDOW *lives_win;
+
+    lives_win = newwin(1, 10, 0, maxcols - 10);
+    new_lives = lives + amount;
+
+    mvwprintw(lives_win, 0, 0, "Lives: %d", new_lives);
+    wrefresh(lives_win);
+
+    return new_lives;
 }
