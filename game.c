@@ -2,27 +2,29 @@
 #include <string.h>
 #include <ncurses.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #define MAX_LEN 256
 
+struct Result {
+    int correct;
+    int lives;
+};
+
 void append(char* s, int c);
 int char_in_pos(char* s, int c, int pos);
-int end_screen(int lines, int cols, int correct, int size_words);
+int end_screen(int lines, int cols, struct Result result);
 int title_screen(int lines, int cols);
-int game_screen(int lines, int cols, char (*words)[MAX_LEN], int size_words);
+struct Result game_screen(int lines, int cols, char *filename);
 int move_cursor_vertical(int y, int x, int maxpos, int curpos);
 int lives_counter(int lives, int amount, int maxcols);
 
 int main (void) {
     char curr[MAX_LEN];
-    char words[4][MAX_LEN] = {
-        "jotaro",
-        "aloha",
-        "miau",
-        "ahre"
-    };
+    FILE *file;
     int correct, maxlines, maxcols;
-    size_t size_words = sizeof(words) / sizeof(words[0]);
+    struct Result result;
+    char filename[] = "theoldmanandthesea.txt";
 
     /* Initialize curses */
     initscr();
@@ -36,8 +38,8 @@ int main (void) {
     /* Game loop */
     while (1) {
         title_screen(maxlines, maxcols);
-        correct = game_screen(maxlines, maxcols, words, size_words);
-        end_screen(maxlines, maxcols, correct, size_words);
+        result = game_screen(maxlines, maxcols, filename);
+        end_screen(maxlines, maxcols, result);
     }
 
     endwin();
@@ -59,24 +61,27 @@ int char_in_pos (char* s, int c, int pos) {
 
 int title_screen (int lines, int cols) {
     int pos, y, x;
-    int maxpos = 1;
+    int maxpos = 2;
 
     clear();
     refresh();
 
     mvprintw(lines / 2, cols / 2, "Typefast!");
     mvprintw(lines / 2 + 1, cols / 2, "Play");
-    mvprintw(lines / 2 + 2, cols / 2, "Exit");
+    mvprintw(lines / 2 + 2, cols / 2, "File");
+    mvprintw(lines / 2 + 3, cols / 2, "Exit");
     getyx(stdscr, y, x);
-    move(y - 1, cols / 2);
+    move(y - 2, cols / 2);
     refresh();
 
-    pos = move_cursor_vertical(y - 1, cols / 2, maxpos, 0);
+    pos = move_cursor_vertical(y - 2, cols / 2, maxpos, 0);
 
     switch (pos) {
         case 0:
             return 0;
         case 1:
+            return 0;
+        case 2:
         default:
             clear();
             refresh();
@@ -86,21 +91,21 @@ int title_screen (int lines, int cols) {
 }
 
 
-int end_screen (int lines, int cols, int correct, int size_words) {
+int end_screen (int lines, int cols, struct Result result) {
     int y, x;
     int pos = 0;
     int maxpos = 1;
-    char msg[20] = "You win!";
+    char msg[20] = "You lose!";
 
-    if (correct < size_words) {
-        strncpy(msg, "You lose!", 20);
+    if (result.lives > 0) {
+        strncpy(msg, "You win!", 20);
     }
 
     clear();
     refresh();
 
     mvprintw(lines / 2, cols / 2, "%s", msg);
-    mvprintw(lines / 2 + 1, cols / 2, "Correct words: %d/%d", correct, size_words);
+    mvprintw(lines / 2 + 1, cols / 2, "Correct words: %d", result.correct);
     mvprintw(lines / 2 + 2, cols / 2, "Return to title");
     mvprintw(lines / 2 + 3, cols / 2, "Exit");
     getyx(stdscr, y, x);
@@ -120,22 +125,50 @@ int end_screen (int lines, int cols, int correct, int size_words) {
     }
 }
 
-int game_screen (int lines, int cols, char (*words)[MAX_LEN], int size_words) {
+struct Result game_screen (int lines, int cols, char *filename) {
     char curr[MAX_LEN];
-    int ch, chpos, count;
+    int ch, chpos, count, c;
     int correct = 0;
+    char text[MAX_LEN];
+    FILE *file;
+    int word_count = 0;
+    int level = 1;
+    int lives;
+    struct Result result;
 
-    for (count = 0; count < size_words; ++count) {
+    file = fopen(filename, "r");
+    if (!file) {
+        endwin();
+        exit(0);
+    }
+    memset(text, 0, sizeof(text));
+    lives = lives_counter(3, 0, cols);
+
+    while ((c = getc(file)) != EOF) {
+        if (isspace(c)) {
+            if (strcmp(text, "") == 0) {
+                continue;
+            }
+            ++word_count;
+            if (word_count < level) {
+                if (text[strlen(text)] != ' ') {
+                    append(text, ' ');
+                }
+                continue;
+            }
+        } else {
+            append(text, c);
+            continue;
+        }
+
         clear();
         refresh();
 
         chpos = 0;
         memset(curr, 0, sizeof(curr)); /* Reset current attemp */
 
-        mvprintw(lines / 2, cols / 2, "%s", words[count]);
+        mvprintw(lines / 2, cols / 2, "%s", text);
         refresh();
-
-        int lives = lives_counter(3, 0, cols);
 
         while (lives > 0) {
             ch = getch();
@@ -143,14 +176,14 @@ int game_screen (int lines, int cols, char (*words)[MAX_LEN], int size_words) {
             if (ch == ERR || ch == KEY_EXIT || ch == 27) {
                 /* For now, we end everything */
                 endwin();
-                return 0;
-            } else if (char_in_pos(words[count], ch, chpos) == 0) {
+                exit(0);
+            } else if (char_in_pos(text, ch, chpos) == 0) {
                 /* Correct char */
                 ++chpos;
                 append(curr, ch);
                 mvprintw(lines, cols / 2, curr);
 
-                if (strcmp(curr, words[count]) == 0) {
+                if (strcmp(curr, text) == 0) {
                     break;
                 }
 
@@ -167,10 +200,18 @@ int game_screen (int lines, int cols, char (*words)[MAX_LEN], int size_words) {
 
         if (lives != 0) {
             ++correct;
+        } else {
+            break;
         }
+
+        memset(text, 0, sizeof(text));
+        word_count = 0;
     }
 
-    return correct;
+    result.lives = lives;
+    result.correct = correct;
+
+    return result;
 }
 
 int move_cursor_vertical (int y, int x, int maxpos, int curpos) {
