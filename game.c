@@ -15,7 +15,7 @@ void append(char* s, int c);
 int char_in_pos(char* s, int c, int pos);
 int end_screen(int lines, int cols, struct Result result);
 int title_screen(int lines, int cols);
-struct Result game_screen(int lines, int cols, char *filename);
+struct Result game_screen(int lines, int cols, char *filename, int max_chars);
 int move_cursor_vertical(int y, int x, int maxpos, int curpos);
 int lives_counter(int lives, int amount, int maxcols);
 
@@ -25,6 +25,7 @@ int main (void) {
     int correct, maxlines, maxcols;
     struct Result result;
     char filename[] = "theoldmanandthesea.txt";
+    int max_chars = MAX_LEN;
 
     /* Initialize curses */
     initscr();
@@ -38,7 +39,7 @@ int main (void) {
     /* Game loop */
     while (1) {
         title_screen(maxlines, maxcols);
-        result = game_screen(maxlines, maxcols, filename);
+        result = game_screen(maxlines, maxcols, filename, MAX_LEN);
         end_screen(maxlines, maxcols, result);
     }
 
@@ -125,15 +126,18 @@ int end_screen (int lines, int cols, struct Result result) {
     }
 }
 
-struct Result game_screen (int lines, int cols, char *filename) {
+struct Result game_screen (int lines, int cols, char *filename, int max_chars) {
     char curr[MAX_LEN];
     int ch, chpos, count, c;
+    int curr_col, curr_line;
     int correct = 0;
     char text[MAX_LEN];
     FILE *file;
+    int char_count = 0;
     int word_count = 0;
-    int level = 1;
     int lives;
+    int text_lines, text_start;
+    static WINDOW *text_win;
     struct Result result;
 
     file = fopen(filename, "r");
@@ -142,22 +146,28 @@ struct Result game_screen (int lines, int cols, char *filename) {
         exit(0);
     }
     memset(text, 0, sizeof(text));
-    lives = lives_counter(3, 0, cols);
+
+    lives = lives_counter(3, 0, cols); /* Start with 3 lives */
+
+    text_lines = 1 + ((max_chars -1) / (cols - 2));
+    text_start = (lines - text_lines) / 2; /* Hopefully equidistant from top and bottom */
+    text_win = newwin(text_lines, cols - 1, text_start, 1);
+
+    wrefresh(text_win);
+    clear();
+    refresh();
 
     while ((c = getc(file)) != EOF) {
-        if (isspace(c)) {
-            if (strcmp(text, "") == 0) {
-                continue;
-            }
-            ++word_count;
-            if (word_count < level) {
+        ++char_count;
+        if (char_count < max_chars) {
+            if (isspace(c) && strcmp(text, "") != 0) {
+                ++word_count;
                 if (text[strlen(text)] != ' ') {
                     append(text, ' ');
                 }
-                continue;
+            } else {
+                append(text, c);
             }
-        } else {
-            append(text, c);
             continue;
         }
 
@@ -167,8 +177,9 @@ struct Result game_screen (int lines, int cols, char *filename) {
         chpos = 0;
         memset(curr, 0, sizeof(curr)); /* Reset current attemp */
 
-        mvprintw(lines / 2, cols / 2, "%s", text);
-        refresh();
+        mvwprintw(text_win, 0, 0, "%s", text);
+        wmove(text_win, 0, 0);
+        wrefresh(text_win);
 
         while (lives > 0) {
             ch = getch();
@@ -181,7 +192,10 @@ struct Result game_screen (int lines, int cols, char *filename) {
                 /* Correct char */
                 ++chpos;
                 append(curr, ch);
-                mvprintw(lines, cols / 2, curr);
+                curr_line = chpos / text_lines;
+                curr_col = chpos - curr_line * (cols - 1);
+                wchgat(text_win, 1, A_DIM, 0, NULL);
+                wmove(text_win, curr_line, curr_col);
 
                 if (strcmp(curr, text) == 0) {
                     break;
@@ -193,9 +207,8 @@ struct Result game_screen (int lines, int cols, char *filename) {
                 if (lives == 0) {
                     break;
                 }
-                mvprintw(lines, cols / 2, curr);
             }
-            refresh();
+            wrefresh(text_win);
         }
 
         if (lives != 0) {
