@@ -181,26 +181,34 @@ struct Result game_screen (int lines, int cols, char *filename, int max_chars) {
         wmove(text_win, 0, 0);
         wrefresh(text_win);
 
+        curr_line = 0;
+        curr_col = 0;
+
         while (lives > 0) {
             ch = getch();
 
             if (ch == ERR || ch == KEY_EXIT || ch == 27) {
-                /* For now, we end everything */
+                /* For now, we end everything. There should
+                 be a pause screen somewhere around here. */
                 endwin();
                 exit(0);
             } else if (char_in_pos(text, ch, chpos) == 0) {
                 /* Correct char */
                 ++chpos;
+                if (curr_col == cols - 2) {
+                    ++curr_line;
+                    curr_col = 0;
+                } else {
+                    ++curr_col;
+                }
+
                 append(curr, ch);
-                curr_line = chpos / text_lines;
-                curr_col = chpos - curr_line * (cols - 1);
                 wchgat(text_win, 1, A_DIM, 0, NULL);
                 wmove(text_win, curr_line, curr_col);
 
                 if (strcmp(curr, text) == 0) {
                     break;
                 }
-
             } else {
                 /* Incorrect char */
                 lives = lives_counter(lives, -1, cols);
